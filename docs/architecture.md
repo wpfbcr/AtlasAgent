@@ -1,47 +1,48 @@
-# AtlasAgent 架构说明
+# AtlasAgent 架构
 
 ## 设计原则
 
-1. **Skill-first**：编排逻辑在 SKILL.md，可运行于 Hermes / Cursor / Claude Code
-2. **零配置优先**：L0 不依赖 API Key（Open-Meteo + Frankfurter + OSM）
-3. **渐进增强**：L1 MCP / L2 OAuth 按需启用
-4. **不虚构数据**：API 失败时标注「估算，出行前验证」
+1. **Agent-agnostic** — 遵循 [agentskills.io](https://agentskills.io/specification)；SKILL 正文不含 Hermes/Cursor 专有 API
+2. **Full repo runtime** — `skills/` 是指令；`scripts/` 是工具；二者通过 `ATLAS_ROOT` 关联
+3. **Progressive disclosure** — 主编排 `atlas-agent` + 8 个子 skill；细节在各自 `references/`
+4. **Tiered capabilities** — L0 零 Key → L1 MCP/UGC → L2 专业 API
+
+## 结构
+
+```
+AtlasAgent/
+├── AGENTS.md                 # Agent 速览（任意模型可读）
+├── skills/
+│   ├── atlas-agent/          # 主编排 + references/destinations/
+│   ├── weather/
+│   └── ...                   # 8 个子 skill
+├── scripts/                  # Python CLI（weather, currency, pdf, install）
+├── examples/                 # 示例行程
+├── mcp/                      # 可选 MCP 配置
+└── docs/install.md           # 多 Agent 安装表
+```
 
 ## 模块关系
 
 ```
-atlas-agent (主编排)
-├── weather          → scripts/weather_client.py
-├── currency         → scripts/currency_client.py
-├── visa-entry       → references/visa-quick-ref.md + web
-├── dietary-global   → references/dietary-playbooks.md
-├── transport-global → references/transport-guides.md
-├── local-intel      → agent-reach / web_search
-├── travel-documents → references/document-addons.md
-├── budget-optimizer → currency + 模板
-└── maps (外部)      → Hermes maps skill
+atlas-agent
+├── weather, currency     → $ATLAS_SCRIPTS/*.py
+├── visa-entry, dietary-global, transport-global, … → skill references
+└── destinations          → skills/atlas-agent/references/destinations/
 ```
 
-## 三层能力
+## 安装模型
 
-| 层级 | 组件 |
-|------|------|
-| L0 | maps + Open-Meteo + Frankfurter + references/destinations |
-| L1 | trvl MCP + Agent-Reach |
-| L2 | Amadeus + Google Workspace + Notion |
+| 层 | 内容 | 安装方式 |
+|----|------|----------|
+| Skills | `skills/*/SKILL.md` | `install.sh` → ~/.cursor/skills 等 |
+| Runtime | `scripts/` | 保留完整 git clone，`ATLAS_ROOT` |
+| 可选 | trvl MCP, MAPS_SCRIPT | 环境变量 / MCP 配置 |
 
-## 数据流
+## 与 Hermes 的关系
 
-```
-用户输入 → Phase 0 约束收集
-         → Phase 1 并行数据采集
-         → Phase 1.5 消歧
-         → Phase 2 排程工程
-         → Phase 3 行程 + 预算
-         → Phase 4 方案对比
-         → Phase 5 导出 (MD/PDF/Obsidian/Notion)
-```
+Hermes 是 **可选** 安装目标（`install.sh hermes`）。不再在 SKILL 中硬编码 `~/.hermes` 路径或 `clarify()` 等专有工具。
 
-## 与旧 travel-planning 的关系
+## 版本
 
-AtlasAgent **完全替代** Hermes `travel-planning`（中国境内专用）。全球场景统一由 `atlas-agent` 处理，中国境内游作为全球子集（references 可扩展中国城市）。
+Skill pack `metadata.atlas.version`: **1.1.0** — agent-agnostic refactor

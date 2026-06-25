@@ -8,7 +8,7 @@
 
 - [x] 9 个 skills + 4 个 CLI 脚本
 - [x] 中文 README + 2 个示例行程
-- [ ] Demo GIF（Agent 生成东京行程）
+- [ ] Add agent-skills topic badge note in README
 - [ ] GitHub Topics: `travel`, `ai-agent`, `mcp`, `hermes`, `cursor`, `itinerary`
 - [ ] HN / Reddit r/travel / V2EX 首发帖
 

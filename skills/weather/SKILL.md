@@ -1,66 +1,51 @@
 ---
 name: weather
-description: "全球天气预报：Open-Meteo 7-16 日预报，零 API Key，支持城市名或坐标。"
-version: 1.0.0
-author: AtlasAgent
+description: >
+  Fetches global weather forecasts via Open-Meteo without an API key.
+  Use when planning travel dates, packing, outdoor activities, or when the user asks
+  about weather, 天气, forecast, or climate at a destination.
 license: MIT
-platforms: [linux, macos, windows]
+compatibility: Requires Python 3.9+ and network access. Requires ATLAS_ROOT repo clone.
 metadata:
-  hermes:
-    tags: [weather, forecast, open-meteo, travel]
-    category: productivity
-    requires_toolsets: [terminal]
-    related_skills: [atlas-agent]
+  atlas:
+    version: "1.1.0"
+    parent: atlas-agent
 ---
 
-# Weather Skill
+# Weather
 
-使用 [Open-Meteo](https://open-meteo.com/) 免费 API 获取全球天气预报，替代 wttr.in（国内常超时）。
+Open-Meteo forecasts for travel planning (replaces wttr.in — more reliable globally).
 
-## When to Use
-
-- 规划行程需要目的地未来 7–16 日天气
-- 决定穿着、户外/室内活动安排
-- 评估雨季/极端天气风险
-
-## Script
+## Setup
 
 ```bash
-WEATHER=~/AtlasAgent/scripts/weather_client.py
+export ATLAS_ROOT="${ATLAS_ROOT:-$HOME/AtlasAgent}"
+export ATLAS_SCRIPTS="$ATLAS_ROOT/scripts"
 ```
 
-### forecast — 逐日预报
+## Commands
 
 ```bash
-python3 $WEATHER forecast --city "Tokyo" --days 7
-python3 $WEATHER forecast --lat 48.8566 --lon 2.3522 --days 5
-python3 $WEATHER forecast --city "Sydney" --days 10 --json
+python3 "$ATLAS_SCRIPTS/weather_client.py" forecast --city "Tokyo" --days 7
+python3 "$ATLAS_SCRIPTS/weather_client.py" forecast --lat 48.8566 --lon 2.3522 --days 5
+python3 "$ATLAS_SCRIPTS/weather_client.py" current --city "Paris"
+python3 "$ATLAS_SCRIPTS/weather_client.py" forecast --city "Sydney" --days 10 --json
 ```
 
-输出：日期、天气描述、最高/最低温、降水量、降水概率、最大风速。
+## Output Use
 
-### current — 当日概况
-
-```bash
-python3 $WEATHER current --city "Paris"
-```
-
-## Integration with atlas-agent
-
-在 Phase 1 并行调用，结果写入行程「🌤️ 天气概况」模块：
-- 标注数据来源与查询时间
-- 雨天 → 调整户外景点到室内备选
-- 高温/严寒 → 写入注意事项
+- Summarize in itinerary weather section
+- Rain → swap outdoor sights for indoor backups
+- Extreme heat/cold → packing notes
+- Forecast beyond 7 days = trend only
 
 ## Pitfalls
 
-- 预报精度随天数递减，7 日以上仅作趋势参考
-- 南半球季节与北半球相反（6 月悉尼 = 冬季）
-- 山区/海岛微气候 Open-Meteo 可能偏差，标注「仅供参考」
+- Southern hemisphere seasons differ (June in Sydney = winter)
+- Mountain/coastal microclimates may differ from city forecast
 
-## Verification
+## Verify
 
 ```bash
-python3 $WEATHER forecast --city "Paris" --days 3
-# 应返回 3 行逐日数据
+python3 "$ATLAS_SCRIPTS/weather_client.py" forecast --city Paris --days 3
 ```
