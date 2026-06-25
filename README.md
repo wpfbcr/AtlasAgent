@@ -6,6 +6,18 @@
 
 **中文文档（主文档）**: [README.zh.md](README.zh.md)
 
+<p align="center">
+  <img src="docs/assets/atlas-agent-hero.jpg" alt="AtlasAgent travel planning skill pack" width="900">
+</p>
+
+## Demo
+
+Sample output: [Tokyo 7-day itinerary](examples/tokyo-7days-zh.md) → PDF export
+
+<p align="center">
+  <img src="docs/assets/demo-itinerary-preview.png" alt="Tokyo itinerary PDF preview" width="720">
+</p>
+
 ## Quick Start
 
 ```bash

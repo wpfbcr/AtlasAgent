@@ -7,6 +7,24 @@
 
 > 零 API Key 即可起步 · 多方案对比 · 逐日行程 · 多币种预算 · 签证/饮食/交通决策 · PDF 导出
 
+<p align="center">
+  <img src="docs/assets/atlas-agent-hero.jpg" alt="AtlasAgent 全球 AI 旅游攻略 Skill Pack" width="900">
+</p>
+
+## Demo 预览
+
+**Agent 输出示例**（东京 7 日深度游）→ 一键导出 PDF：
+
+<p align="center">
+  <img src="docs/assets/demo-itinerary-preview.png" alt="东京 7 日行程 PDF 预览" width="720">
+</p>
+
+| 资源 | 链接 |
+|------|------|
+| Markdown 行程 | [examples/tokyo-7days-zh.md](examples/tokyo-7days-zh.md) |
+| PDF 导出 | 本地运行 `python3 scripts/md2pdf.py examples/tokyo-7days-zh.md` |
+| 巴黎示例 | [examples/paris-romantic-5days-zh.md](examples/paris-romantic-5days-zh.md) |
+
 ---
 
 ## 5 分钟快速开始
@@ -63,19 +81,6 @@ python3 scripts/currency_client.py convert 1000 --from USD --to JPY
 - [trvl MCP](https://github.com/mikkoparkkola/trvl) — 零 Key 航班/酒店搜索
 
 ---
-
-## 示例输出
-
-完整示例见 [examples/](examples/)：
-
-- [东京 7 日深度游](examples/tokyo-7days-zh.md)
-- [巴黎 5 日浪漫之旅](examples/paris-romantic-5days-zh.md)
-
-导出 PDF：
-
-```bash
-python3 scripts/md2pdf.py examples/tokyo-7days-zh.md
-```
 
 ---
 
