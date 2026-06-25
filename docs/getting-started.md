@@ -1,6 +1,6 @@
 # 入门指南
 
-**推荐**：复制给 Agent 的一句话安装见 [README.zh.md](../README.zh.md)。
+**推荐**：复制给 Agent 的一句话安装见 [README.md](../README.md)。
 
 ```
 帮我安装 AtlasAgent：https://raw.githubusercontent.com/wpfbcr/AtlasAgent/main/docs/install.md
