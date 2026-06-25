@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+# AtlasAgent CLI — install, doctor, check-update
+# Usage: atlas-agent install | doctor | check-update
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ATLAS_ROOT="${ATLAS_ROOT:-$REPO_ROOT}"
+export ATLAS_ROOT
+
+log() { echo "$@"; }
+ok() { echo "  ✓ $*"; }
+warn() { echo "  ⚠ $*"; }
+fail() { echo "  ✗ $*"; }
+
+usage() {
+  cat <<'EOF'
+AtlasAgent — global travel planning skill pack
+
+Usage:
+  atlas-agent install [--env=auto] [--agent=all|cursor|claude|codex|copilot|hermes] [--safe] [--dry-run]
+  atlas-agent doctor [--json]
+  atlas-agent check-update
+
+Environment:
+  ATLAS_ROOT   Repository path (default: parent of this script)
+EOF
+}
+
+cmd_doctor() {
+  local json=false
+  [[ "${1:-}" == "--json" ]] && json=true
+
+  local py_ok=false scripts_ok=false weather_ok=false currency_ok=false fpdf_ok=false
+  local cursor_ok=false claude_ok=false
+
+  command -v python3 >/dev/null 2>&1 && py_ok=true
+  [[ -d "$ATLAS_ROOT/scripts" && -f "$ATLAS_ROOT/scripts/weather_client.py" ]] && scripts_ok=true
+
+  if $py_ok && $scripts_ok; then
+    python3 "$ATLAS_ROOT/scripts/weather_client.py" forecast --city Tokyo --days 1 >/dev/null 2>&1 && weather_ok=true
+    python3 "$ATLAS_ROOT/scripts/currency_client.py" convert 1 --from USD --to JPY >/dev/null 2>&1 && currency_ok=true
+  fi
+
+  python3 -c "import fpdf" 2>/dev/null && fpdf_ok=true
+  [[ -f "${HOME}/.cursor/skills/atlas-agent/SKILL.md" ]] && cursor_ok=true
+  [[ -f "${HOME}/.claude/skills/atlas-agent/SKILL.md" ]] && claude_ok=true
+
+  if $json; then
+    cat <<JSON
+{
+  "atlas_root": "$ATLAS_ROOT",
+  "python3": $py_ok,
+  "scripts": $scripts_ok,
+  "weather_api": $weather_ok,
+  "currency_api": $currency_ok,
+  "fpdf2": $fpdf_ok,
+  "skill_cursor": $cursor_ok,
+  "skill_claude": $claude_ok
+}
+JSON
+    return 0
+  fi
+
+  log "AtlasAgent Doctor"
+  log "ATLAS_ROOT: $ATLAS_ROOT"
+  log ""
+  $py_ok && ok "Python 3" || fail "Python 3 not found"
+  $scripts_ok && ok "Runtime scripts" || fail "scripts/ missing — clone full repo"
+  $weather_ok && ok "Weather (Open-Meteo)" || warn "Weather API unreachable"
+  $currency_ok && ok "Currency (Frankfurter)" || warn "Currency API unreachable"
+  $fpdf_ok && ok "PDF export (fpdf2)" || warn "fpdf2 not installed (optional: pip3 install fpdf2)"
+  log ""
+  log "Skills installed:"
+  $cursor_ok && ok "Cursor (~/.cursor/skills/atlas-agent)" || warn "Cursor skill not installed"
+  $claude_ok && ok "Claude Code (~/.claude/skills/atlas-agent)" || warn "Claude skill not installed"
+  log ""
+  if $scripts_ok && $weather_ok && $currency_ok; then
+    log "Status: ready for L0 travel planning"
+  else
+    log "Status: fix issues above, or run: atlas-agent install --env=auto"
+  fi
+}
+
+cmd_check_update() {
+  if command -v gh >/dev/null 2>&1; then
+    local remote
+    remote="$(gh api repos/wpfbcr/AtlasAgent --jq '.pushed_at' 2>/dev/null || true)"
+    log "Remote last push: ${remote:-unknown}"
+    log "Local: $ATLAS_ROOT"
+    log "Update: git -C \"$ATLAS_ROOT\" pull && bash \"$ATLAS_ROOT/scripts/install.sh\" all"
+  else
+    log "Run: git -C \"$ATLAS_ROOT\" pull"
+    log "Then: bash \"$ATLAS_ROOT/scripts/install.sh\" all"
+  fi
+}
+
+cmd_install() {
+  local agent="all" safe=false dry=false
+  for arg in "$@"; do
+    case "$arg" in
+      --env=auto|--env=*) ;;
+      --agent=*) agent="${arg#*=}" ;;
+      --safe) safe=true ;;
+      --dry-run) dry=true ;;
+      --help|-h) usage; exit 0 ;;
+    esac
+  done
+
+  if $dry; then
+    log "[dry-run] Would clone/use ATLAS_ROOT=$ATLAS_ROOT"
+    log "[dry-run] Would install skills to agent=$agent"
+    $safe || log "[dry-run] Would append ATLAS_ROOT to ~/.zshrc"
+    $safe || log "[dry-run] Would run: pip3 install fpdf2 (optional)"
+    exit 0
+  fi
+
+  if $safe; then
+    log "Safe mode — manual steps:"
+    log "  1. git clone https://github.com/wpfbcr/AtlasAgent.git ~/AtlasAgent"
+    log "  2. export ATLAS_ROOT=~/AtlasAgent"
+    log "  3. bash \$ATLAS_ROOT/scripts/install.sh $agent"
+    log "  4. pip3 install fpdf2   # optional"
+    log "  5. atlas-agent doctor"
+    exit 0
+  fi
+
+  bash "$REPO_ROOT/scripts/install.sh" "$agent"
+
+  if ! python3 -c "import fpdf" 2>/dev/null; then
+    pip3 install fpdf2 -q 2>/dev/null && ok "Installed fpdf2" || warn "Could not auto-install fpdf2 — run: pip3 install fpdf2"
+  fi
+
+  log ""
+  cmd_doctor
+}
+
+case "${1:-}" in
+  install) shift; cmd_install "$@" ;;
+  doctor) shift; cmd_doctor "${1:-}" ;;
+  check-update) shift; cmd_check_update ;;
+  ""|-h|--help|help) usage ;;
+  *) echo "Unknown command: $1"; usage; exit 1 ;;
+esac

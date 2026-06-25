@@ -17,6 +17,16 @@ metadata:
 
 Orchestrates worldwide trip planning: multi-plan comparison, daily schedules, budgets, visa/diet/transport decisions, PDF export.
 
+## Install
+
+If not installed yet, follow [docs/install.md](../../docs/install.md) or tell the user:
+
+```
+帮我安装 AtlasAgent：https://raw.githubusercontent.com/wpfbcr/AtlasAgent/main/docs/install.md
+```
+
+Verify: `bash "$ATLAS_ROOT/scripts/atlas-agent doctor"`
+
 ## When to Use
 
 - User provides origin, dates, party size — needs an itinerary
@@ -46,7 +56,7 @@ export ATLAS_SCRIPTS="$ATLAS_ROOT/scripts"
 export ATLAS_REF="$ATLAS_ROOT/skills/atlas-agent/references"
 ```
 
-Install: see [docs/install.md](../../docs/install.md) or run `bash scripts/install.sh`.
+Install: see [docs/install.md](../../docs/install.md) — **full repo required**, not skills/ alone.
 
 ## Workflow
 
