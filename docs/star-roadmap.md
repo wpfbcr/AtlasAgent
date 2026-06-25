@@ -8,9 +8,10 @@
 
 - [x] 9 个 skills + 4 个 CLI 脚本
 - [x] 中文 README + 2 个示例行程
+- [x] GitHub Release v1.0.0
 - [ ] Add agent-skills topic badge note in README
-- [ ] GitHub Topics: `travel`, `ai-agent`, `mcp`, `hermes`, `cursor`, `itinerary`
-- [ ] HN / Reddit r/travel / V2EX 首发帖
+- [x] GitHub Topics: `travel`, `ai-agent`, `mcp`, `hermes`, `cursor`, `itinerary`
+- [ ] HN / Reddit r/travel / V2EX 首发帖（文案见 [promotion-playbook.md](promotion-playbook.md)）
 
 ## Phase 2 — 社区飞轮（100 → 500 stars）
 
