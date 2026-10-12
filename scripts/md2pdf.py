@@ -1,234 +1,194 @@
 #!/usr/bin/env python3
-"""Convert Markdown travel itineraries to PDF with CJK support.
-
-Usage:
-  python3 md2pdf.py examples/tokyo-7days-zh.md
-  python3 md2pdf.py examples/          # convert all .md in directory
-
-Requires: pip3 install fpdf2
-"""
-
-from fpdf import FPDF
-import re
+"""Render Markdown itineraries with wrapped tables, CJK and visible diet labels."""
+import argparse
+import importlib.metadata
 import os
+from pathlib import Path
+import re
 import sys
 
-FONT_SIZE = 9.5
-LINE_HEIGHT = 5.5
+FONT_CANDIDATES = ['/System/Library/Fonts/Supplemental/Arial Unicode.ttf', '/System/Library/Fonts/PingFang.ttc', '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc', '/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc', 'C:\\Windows\\Fonts\\msyh.ttc']
+SYMBOLS = {'🟢': '[符合已知限制]', '🟡': '[需调整并确认]', '🔴': '[含受限成分]', '⚠': '[注意]', '⭐': '★', '✈': '[交通]', '🌤': '[天气]', '🛂': '[签证]', '🎯': '[定位]', '🕐': '[时区]', '🍜': '[美食]', '🏨': '[住宿]', '💰': '[预算]', '📍': '[地点]', '📅': '[日期]', '💱': '[汇率]'}
 
-FONT_CANDIDATES = [
-    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
-    "/System/Library/Fonts/PingFang.ttc",
-    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-    "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
-    "C:\\Windows\\Fonts\\msyh.ttc",
-]
+try:
+    if tuple(int(n) for n in importlib.metadata.version('fpdf2').split('.')[:3]) < (2, 8, 4):
+        raise ImportError('fpdf2 >= 2.8.4 required')
+    from fpdf import FPDF, FontFace
+    from fpdf.errors import FPDFException
+    from fontTools.ttLib import TTFont
+except (ImportError, importlib.metadata.PackageNotFoundError) as exc:
+    raise SystemExit('PDF export requires fpdf2 >= 2.8.4: python3 -m pip install -r requirements-pdf.txt') from exc
 
 
-def find_font() -> str:
-    for path in FONT_CANDIDATES:
-        if os.path.isfile(path):
-            return path
-    raise SystemExit("No CJK font found. Install Noto Sans CJK or use macOS/Windows system fonts.")
+def find_font():
+    configured = os.environ.get('ATLAS_FONT')
+    candidates = [configured] if configured else FONT_CANDIDATES
+    for candidate in candidates:
+        if candidate and Path(candidate).is_file():
+            return candidate
+    raise ValueError('No CJK font found. Set ATLAS_FONT to a CJK TTF/TTC font or install Noto Sans CJK.')
 
 
 class MD2PDF(FPDF):
-    def __init__(self, title="", font_path=""):
-        super().__init__("P", "mm", "A4")
-        self.add_font("C", "", font_path)
-        self.add_font("C", "B", font_path)
+    def __init__(self, title='', font_path=''):
+        super().__init__('P', 'mm', 'A4')
+        self.set_margins(15, 15, 15)
         self.set_auto_page_break(True, 20)
-        self.doc_title = title
+        self.add_font('C', '', font_path)
+        self.add_font('C', 'B', font_path)
+        with TTFont(font_path, fontNumber=0) as font:
+            self.characters = set(font.getBestCmap())
+        self.doc_title = self._clean(title)
+        self.set_title(self.doc_title)
+
+    def _clean(self, text):
+        for symbol, label in SYMBOLS.items():
+            text = text.replace(symbol, label)
+        text = text.replace('\ufe0f', '').replace('\ufe0e', '').replace('\u200d', '')
+        text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+        text = re.sub(r'(?<!\w)\*([^*]+)\*(?!\w)', r'\1', text)
+        text = re.sub(r'`([^`]+)`', r'\1', text)
+        # Retain source URLs so the exported artifact remains independently usable.
+        text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'\1 (\2)', text)
+        text = re.sub(r'<[^>]+>', '', text)
+        text = text.replace('\\|', '|')
+        return ''.join(ch if ch in '\n\t' or ord(ch) in self.characters else '[U+{:X}]'.format(ord(ch)) for ch in text)
 
     def header(self):
         if self.page_no() > 1:
-            self.set_font("C", "", 8)
-            self.set_text_color(150, 150, 150)
-            self.cell(0, 5, self.doc_title, align="C")
-            self.ln(8)
+            self.set_font('C', '', 8)
+            self.set_text_color(130, 130, 130)
+            self.cell(0, 5, self.doc_title, align='C', new_x='LMARGIN', new_y='NEXT')
+            self.ln(3)
 
     def footer(self):
         self.set_y(-15)
-        self.set_font("C", "", 8)
-        self.set_text_color(150, 150, 150)
-        self.cell(0, 10, f"- {self.page_no()} -", align="C")
+        self.set_font('C', '', 8)
+        self.set_text_color(130, 130, 130)
+        self.cell(0, 8, '- {} -'.format(self.page_no()), align='C')
+
+    def paragraph(self, text, size=9.5, indent=0):
+        self.set_font('C', '', size)
+        self.set_text_color(40, 40, 40)
+        self.set_x(self.l_margin + indent)
+        self.multi_cell(self.epw - indent, 5.5, self._clean(text), new_x='LMARGIN', new_y='NEXT', wrapmode='CHAR')
 
     def render(self, text):
-        lines = text.split("\n")
+        lines = text.splitlines()
         i = 0
         while i < len(lines):
             line = lines[i]
-
-            if re.match(r"^---+$", line.strip()):
-                y = self.get_y()
-                self.set_draw_color(200, 200, 200)
-                self.line(15, y, 195, y)
-                self.ln(6)
+            if line.strip().startswith('```'):
+                code = []
                 i += 1
-                continue
-
-            if line.strip().startswith("```"):
-                code_lines = []
-                i += 1
-                while i < len(lines) and not lines[i].strip().startswith("```"):
-                    code_lines.append(lines[i])
+                while i < len(lines) and not lines[i].strip().startswith('```'):
+                    code.append(lines[i])
                     i += 1
-                i += 1
-                self._code(code_lines)
-                continue
-
-            if "|" in line and line.strip().startswith("|"):
-                table_lines = []
-                while i < len(lines) and "|" in lines[i] and lines[i].strip().startswith("|"):
-                    table_lines.append(lines[i])
+                self._code(code)
+            elif line.strip().startswith('|'):
+                table = []
+                while i < len(lines) and lines[i].strip().startswith('|'):
+                    table.append(lines[i])
                     i += 1
-                self._table(table_lines)
+                self._table(table)
                 continue
-
-            h = re.match(r"^(#{1,6})\s+(.+)$", line)
-            if h:
-                level = len(h.group(1))
-                title = h.group(2).strip()
-                sizes = {1: 20, 2: 15, 3: 12, 4: 10.5, 5: 10, 6: 10}
-                self.set_font("C", "B", sizes.get(level, 10))
-                self.set_text_color(30, 30, 30)
-                if level <= 2:
-                    self.ln(3)
-                self.multi_cell(0, 6.5, title)
-                self.ln(2)
-                if level == 1:
-                    self.set_draw_color(60, 60, 60)
-                    self.line(15, self.get_y(), 195, self.get_y())
-                    self.ln(4)
-                i += 1
-                continue
-
-            if line.strip().startswith(">"):
-                self.set_font("C", "", 9)
-                self.set_text_color(100, 100, 100)
-                self.set_x(20)
-                self.multi_cell(170, 5, line.strip().lstrip("> "))
-                self.ln(1)
-                i += 1
-                continue
-
-            li = re.match(r"^(\s*)[-*]\s+(.+)$", line)
-            num_li = re.match(r"^(\s*)\d+[.)]\s+(.+)$", line)
-            if li or num_li:
-                content = li.group(2) if li else num_li.group(2)
-                self.set_font("C", "", 9)
-                self.set_text_color(50, 50, 50)
-                self.set_x(20)
-                bullet = chr(8226) if li else chr(8212)
-                self.cell(5, 5, bullet)
-                self.multi_cell(165, 5, self._clean(content))
-                i += 1
-                continue
-
-            if not line.strip():
+            elif re.fullmatch(r'\s*-{3,}\s*', line):
                 self.ln(3)
-                i += 1
-                continue
-
-            self.set_font("C", "", FONT_SIZE)
-            self.set_text_color(40, 40, 40)
-            self.multi_cell(0, LINE_HEIGHT, self._clean(line))
+                self.set_draw_color(190, 190, 190)
+                self.line(self.l_margin, self.get_y(), self.w - self.r_margin, self.get_y())
+                self.ln(3)
+            elif re.match(r'^#{1,6}\s', line):
+                match = re.match(r'^(#{1,6})\s+(.+)', line)
+                level = len(match[1])
+                self.set_font('C', 'B', {1: 18, 2: 13, 3: 11}.get(level, 10))
+                self.set_text_color(25, 50, 65)
+                # Reserve room for the heading and some following content.
+                if self.get_y() + (40 if level <= 2 else 24) > self.page_break_trigger:
+                    self.add_page()
+                self.ln(3)
+                self.multi_cell(0, 7, self._clean(match[2]), new_x='LMARGIN', new_y='NEXT', wrapmode='CHAR')
+                self.ln(2)
+            elif line.strip().startswith('>'):
+                self.paragraph(line.strip().lstrip('> '), size=9, indent=4)
+                self.ln(2)
+            elif re.match(r'^\s*[-*]\s+', line):
+                self.paragraph('- ' + re.sub(r'^\s*[-*]\s+', '', line), indent=4)
+            elif re.match(r'^\s*\d+[.)]\s+', line):
+                self.paragraph(line.strip(), indent=4)
+            elif not line.strip():
+                self.ln(2)
+            else:
+                self.paragraph(line)
             i += 1
 
     def _code(self, lines):
-        self.ln(2)
         self.set_fill_color(245, 245, 245)
-        self.set_font("C", "", 8)
-        self.set_text_color(80, 80, 80)
-        for cl in lines:
-            self.set_x(17)
-            self.cell(176, 4.5, cl[:120], fill=True)
-            self.ln()
-        self.ln(3)
+        for line in lines:
+            self.paragraph(line, size=8, indent=2)
+        self.ln(2)
 
     def _table(self, lines):
-        self.ln(2)
         rows = []
-        for l in lines:
-            cells = [c.strip() for c in l.strip().strip("|").split("|")]
-            if not re.match(r"^[\s\-:]+$", "".join(cells)):
-                rows.append(cells)
+        for line in lines:
+            body = line.strip()[1:]
+            if body.endswith('|'):
+                body = body[:-1]
+            cells = [cell.strip() for cell in re.split(r'(?<!\\)\|', body)]
+            if all(re.fullmatch(r':?-+:?', cell) for cell in cells):
+                continue
+            rows.append([self._clean(cell) for cell in cells])
         if not rows:
             return
-
-        cols = len(rows[0])
-        col_w = 176 / cols
-        self.set_font("C", "", 7.5)
-
-        for ri, row in enumerate(rows):
-            if ri == 0:
-                self.set_fill_color(50, 50, 50)
-                self.set_text_color(255, 255, 255)
-                self.set_font("C", "B", 7.5)
-            else:
-                shade = 245 if ri % 2 == 0 else 255
-                self.set_fill_color(shade, shade, shade)
-                self.set_text_color(40, 40, 40)
-                self.set_font("C", "", 7.5)
-
-            for ci, cell in enumerate(row[:cols]):
-                self.set_x(17 + ci * col_w)
-                self.cell(col_w - 1, 5.5, cell[:45], fill=True)
-            self.ln()
+        cols = max(len(row) for row in rows)
+        rows = [row + [''] * (cols - len(row)) for row in rows]
+        self.set_font('C', '', 8)
         self.set_text_color(40, 40, 40)
-        self.ln(4)
+        widths = [max(18, min(85, max(self.get_string_width(row[c]) for row in rows))) for c in range(cols)]
+        self.set_x(self.l_margin)
+        self.ln(2)
+        with self.table(col_widths=widths, width=self.epw, line_height=4.5, padding=1.5, text_align='LEFT', wrapmode='CHAR', headings_style=FontFace(emphasis='BOLD', color=(255, 255, 255), fill_color=(35, 70, 85)), cell_fill_color=(242, 247, 249), cell_fill_mode='ROWS', borders_layout='SINGLE_TOP_LINE', repeat_headings=1) as table:
+            for row in rows:
+                tr = table.row()
+                for cell in row:
+                    tr.cell(cell)
+        self.set_x(self.l_margin)
+        self.ln(3)
 
-    def _clean(self, text):
-        text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
-        text = re.sub(r"`([^`]+)`", r"\1", text)
-        text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
-        text = re.sub(r"<[^>]+>", "", text)
-        return re.sub(r"\s+", " ", text).strip()
 
-
-def convert_file(path: str, font_path: str) -> str:
-    with open(path, "r", encoding="utf-8") as fh:
-        content = fh.read()
-    title = os.path.splitext(os.path.basename(path))[0]
-    pdf = MD2PDF(title=title, font_path=font_path)
+def convert_file(path, font_path):
+    source = Path(path)
+    content = source.read_text(encoding='utf-8')
+    heading = re.search(r'^#\s+(.+)', content, re.M)
+    pdf = MD2PDF(title=heading[1] if heading else source.stem, font_path=font_path)
     pdf.add_page()
     pdf.render(content)
-    out = path.replace(".md", ".pdf")
-    pdf.output(out)
-    return out
+    output = source.with_suffix('.pdf')
+    pdf.output(str(output))
+    return str(output)
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: python3 md2pdf.py <file.md|directory>")
-        sys.exit(1)
-
-    target = sys.argv[1]
-    font_path = find_font()
-
-    if os.path.isfile(target):
-        if not target.endswith(".md"):
-            raise SystemExit("Input must be a .md file")
-        out = convert_file(target, font_path)
-        size = os.path.getsize(out) / 1024
-        print(f"OK  {target}  ->  {out}  ({size:.0f} KB)")
-        return
-
-    if not os.path.isdir(target):
-        raise SystemExit(f"Not found: {target}")
-
-    files = sorted(f for f in os.listdir(target) if f.endswith(".md"))
-    if not files:
-        print(f"No .md files in {target}")
-        return
-
-    for f in files:
-        path = os.path.join(target, f)
-        out = convert_file(path, font_path)
-        size = os.path.getsize(out) / 1024
-        print(f"OK  {f}  ->  {os.path.basename(out)}  ({size:.0f} KB)")
-    print(f"Done. {len(files)} file(s) converted.")
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument('target', type=Path)
+    args = p.parse_args()
+    try:
+        if args.target.is_dir():
+            sources = sorted(args.target.glob('*.md'))
+        elif args.target.is_file() and args.target.suffix == '.md':
+            sources = [args.target]
+        else:
+            raise ValueError('Input must be an existing .md file or directory')
+        if not sources:
+            raise ValueError('No .md files found')
+        font_path = find_font()
+        for source in sources:
+            output = convert_file(source, font_path)
+            print('OK {} -> {} ({:.0f} KB)'.format(source, output, Path(output).stat().st_size / 1024))
+    except (OSError, ValueError, RuntimeError, FPDFException) as exc:
+        print('PDF error: ' + str(exc), file=sys.stderr)
+        return 2
+    return 0
 
 
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    sys.exit(main())

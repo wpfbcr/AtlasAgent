@@ -12,6 +12,7 @@ import argparse
 import json
 from datetime import date, timedelta
 from typing import Dict, List, Optional, Any
+import sys
 
 WEEKDAY_ZH = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
 
@@ -22,6 +23,8 @@ CITY_CLOSURE_HINTS = {
     "rome": "梵蒂冈博物馆周日闭馆（除特殊开放日）",
     "tokyo": "多数博物馆周一闭馆",
     "new york": "部分博物馆周一或周二闭馆",
+    "chengdu": "成都博物馆周一闭馆（法定节假日除外）；具体场馆仍须查官网",
+    "成都": "成都博物馆周一闭馆（法定节假日除外）；具体场馆仍须查官网",
     "beijing": "故宫周一闭馆（法定节假日除外）",
 }
 
@@ -39,6 +42,10 @@ GLOBAL_PEAKS = {
 
 
 def analyze(start: date, days: int, city: Optional[str]) -> Dict[str, Any]:
+    if not 1 <= days <= 366:
+        raise ValueError("--days must be between 1 and 366")
+    if start > date.max - timedelta(days=days - 1):
+        raise ValueError("Date range exceeds supported calendar")
     rows: List[dict] = []
     city_key = (city or "").lower().strip()
     hint = None
@@ -79,8 +86,11 @@ def main():
     p.add_argument("--json", action="store_true")
     args = p.parse_args()
 
-    start = date.fromisoformat(args.start)
-    result = analyze(start, args.days, args.city)
+    try:
+        start = date.fromisoformat(args.start)
+        result = analyze(start, args.days, args.city)
+    except (ValueError, OverflowError) as exc:
+        p.error(str(exc))
 
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))

@@ -33,7 +33,8 @@ python3 "$ATLAS_SCRIPTS/currency_client.py" convert 8000 --from CNY --to JPY EUR
 ## Rules
 
 - Budget tables show **local currency + user currency**
-- Always note `汇率日期: YYYY-MM-DD`
+- Foreign-currency conversions note the returned rate date; same-currency budgets state `无需换汇` and have no fabricated rate date.
+- Repeated `--to` arguments are combined. Use `--json` for machine-readable budget input.
 - Airport/hotel FX rates are worse than ECB reference — mention in cautions
 
 ## Common Codes

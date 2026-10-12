@@ -26,11 +26,15 @@ export ATLAS_SCRIPTS="$ATLAS_ROOT/scripts"
 ## Commands
 
 ```bash
-python3 "$ATLAS_SCRIPTS/weather_client.py" forecast --city "Tokyo" --days 7
+python3 "$ATLAS_SCRIPTS/weather_client.py" forecast --city "Tokyo" --country JP --days 7
 python3 "$ATLAS_SCRIPTS/weather_client.py" forecast --lat 48.8566 --lon 2.3522 --days 5
-python3 "$ATLAS_SCRIPTS/weather_client.py" current --city "Paris"
-python3 "$ATLAS_SCRIPTS/weather_client.py" forecast --city "Sydney" --days 10 --json
+python3 "$ATLAS_SCRIPTS/weather_client.py" current --city "Paris" --country FR
+python3 "$ATLAS_SCRIPTS/weather_client.py" forecast --city "Sydney" --country AU --days 10 --json
 ```
+
+For travel dates, include `--from YYYY-MM-DD` and the exact number of trip days. The client rejects ranges outside the next 16 local dates instead of substituting today's forecast. For ambiguous city names, specify coordinates and `--timezone` after confirming the location; the client prints candidate locations instead of selecting the first.
+
+`current` returns current conditions and their timestamp. `--json` is available for both commands. Missing observations appear as `暂无数据` in text; service failures have a nonzero exit code and an explicit error.
 
 ## Output Use
 

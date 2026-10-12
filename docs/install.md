@@ -91,6 +91,18 @@ This installs:
 2. `ATLAS_ROOT` in `~/.zshrc` or `~/.bashrc` (unless `--safe`)
 3. Optional: `pip3 install fpdf2` for PDF export
 
+### Existing skills
+
+Shell configuration is maintained in a project-owned block; moving the checkout updates that block while preserving other settings. `--env=none` skips shell changes. Identical skills are left in place. If any existing skill differs, installation stops before changing any target's skills or shell configuration. Review the conflict first. To replace changed skills explicitly:
+
+```bash
+bash "$ATLAS_ROOT/scripts/atlas-agent" install --agent=cursor --overwrite
+```
+
+Each replaced skill is moved to a unique directory under the target's `skills/.atlas-backups/`; the installer prints the full backup path. The new copy is staged before the old skill moves, and a failed final move restores the previous skill. Backups are retained for manual recovery. This protects each replaced skill; a later installation failure can still leave earlier skills updated.
+
+For an isolated installation or test, `ATLAS_USER_HOME` selects a separate user configuration directory for `install.sh`; it defaults to the current user's home. This setting does not change `HOME`; doctor checks the same selected user configuration directory.
+
 **L0 zero-config channels (no API key):**
 
 - Weather → Open-Meteo (`weather_client.py`)
@@ -181,3 +193,7 @@ rm -rf ~/.cursor/skills/atlas-agent ~/.cursor/skills/weather ~/.cursor/skills/cu
 # Remove ATLAS_ROOT line from ~/.zshrc if desired
 # rm -rf ~/AtlasAgent
 ```
+
+## Diagnostic states
+
+`doctor` validates all runtime scripts and all nine skills in each supported agent directory. Required failures return exit code 1; missing optional PDF support or uninstalled agent copies produce a degraded status. `doctor --json` uses valid JSON serialization for every path. `doctor --offline` skips API requests and reports degraded readiness rather than claiming online availability. PDF capability is verified by a small CJK export, including the installed version and font.
