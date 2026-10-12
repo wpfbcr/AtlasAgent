@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 import sys
 
-FONT_CANDIDATES = ['/System/Library/Fonts/Supplemental/Arial Unicode.ttf', '/System/Library/Fonts/PingFang.ttc', '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc', '/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc', 'C:\\Windows\\Fonts\\msyh.ttc']
+FONT_CANDIDATES = ['/System/Library/Fonts/Supplemental/Arial Unicode.ttf', '/System/Library/Fonts/PingFang.ttc', '/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc', '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc', '/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc', 'C:\\Windows\\Fonts\\msyh.ttc']
 SYMBOLS = {'🟢': '[符合已知限制]', '🟡': '[需调整并确认]', '🔴': '[含受限成分]', '⚠': '[注意]', '⭐': '★', '✈': '[交通]', '🌤': '[天气]', '🛂': '[签证]', '🎯': '[定位]', '🕐': '[时区]', '🍜': '[美食]', '🏨': '[住宿]', '💰': '[预算]', '📍': '[地点]', '📅': '[日期]', '💱': '[汇率]'}
 
 try:
@@ -25,6 +25,13 @@ def find_font():
     candidates = [configured] if configured else FONT_CANDIDATES
     for candidate in candidates:
         if candidate and Path(candidate).is_file():
+            with TTFont(candidate, fontNumber=0) as font:
+                cff = 'CFF ' in font or 'CFF2' in font
+            version = tuple(int(n) for n in importlib.metadata.version('fpdf2').split('.')[:3])
+            if cff and version < (2, 8, 9):
+                if configured:
+                    raise ValueError('CFF fonts require fpdf2 >= 2.8.9 (Python 3.10+); use a TrueType CJK font on Python 3.9')
+                continue
             return candidate
     raise ValueError('No CJK font found. Set ATLAS_FONT to a CJK TTF/TTC font or install Noto Sans CJK.')
 

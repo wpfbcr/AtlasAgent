@@ -233,7 +233,7 @@ class DoctorTests(unittest.TestCase):
 
 try:
     import md2pdf
-    from pypdf import PdfReader
+    import pymupdf
     PDF_AVAILABLE = True
 except (ImportError, SystemExit):
     PDF_AVAILABLE = False
@@ -256,8 +256,11 @@ class PDFTests(unittest.TestCase):
         source.write_text(text, encoding='utf-8')
         output = Path(md2pdf.convert_file(source, self.font))
         self.assertEqual(output, source.with_suffix('.pdf'))
-        reader = PdfReader(output)
-        return reader, '\n'.join(page.extract_text() for page in reader.pages)
+        reader = pymupdf.open(output)
+        self.addCleanup(reader.close)
+        text = '\n'.join(page.get_text() for page in reader)
+        self.assertNotIn('\x00', text, 'Extraction must preserve actual Unicode text')
+        return reader, text
 
     def test_continuous_lines_and_special_directory_preserve_content(self):
         reader, text = self.export('第一行连续正文\n第二行连续正文\nThird line without blank\n')
@@ -276,10 +279,10 @@ class PDFTests(unittest.TestCase):
         rows = ['| 日期标题 | 行程内容标题 |', '|---|---|']
         rows.extend('| D{} | {} |'.format(i, '内容完整保留。' * 10) for i in range(50))
         reader, text = self.export('\n'.join(rows))
-        self.assertGreater(len(reader.pages), 1)
+        self.assertGreater(len(reader), 1)
         self.assertIn('D49', text)
-        for page in reader.pages:
-            self.assertIn('日期标题', page.extract_text())
+        for page in reader:
+            self.assertIn('日期标题', page.get_text())
 
     def test_table_escaped_pipe_and_empty_first_heading(self):
         reader, text = self.export('| | 内容 |\n|---|---|\n| D1 | 左\\|右 |\n')
