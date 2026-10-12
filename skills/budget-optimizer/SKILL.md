@@ -16,7 +16,7 @@ Standard budget tables for atlas-agent plans.
 
 ## Setup
 
-Use `currency` skill for FX. Note rate date on every table.
+Use `currency` skill for FX. For conversions, note the returned rate date. For same-currency budgets, label them `无需换汇` rather than inventing a date. Validate subtotal, contingency percentage, total, per-person division, and deviation from the requested budget.
 
 ```bash
 export ATLAS_ROOT="${ATLAS_ROOT:-$HOME/AtlasAgent}"

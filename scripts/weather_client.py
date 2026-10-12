@@ -1,123 +1,153 @@
 #!/usr/bin/env python3
-"""Open-Meteo weather client for AtlasAgent. No API key required.
-
-Usage:
-  python3 weather_client.py forecast --city "Tokyo" --days 7
-  python3 weather_client.py forecast --lat 35.6762 --lon 139.6503 --days 5
-  python3 weather_client.py current --city "Paris"
-"""
-
+"""Date-aware Open-Meteo forecasts and current conditions. No API key."""
 import argparse
+from datetime import date, datetime, timedelta, timezone
 import json
+import math
 import sys
 import urllib.parse
-import urllib.request
+from zoneinfo import ZoneInfo
+
+from http_client import APIError, fetch_json
 
 GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+DAILY_FIELDS = "weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max"
+WMO_CODES = {0: "晴", 1: "大部晴朗", 2: "局部多云", 3: "多云", 45: "雾", 48: "雾凇", 51: "小毛毛雨", 53: "毛毛雨", 55: "大毛毛雨", 56: "冻毛毛雨", 57: "强冻毛毛雨", 61: "小雨", 63: "中雨", 65: "大雨", 66: "冻雨", 67: "强冻雨", 71: "小雪", 73: "中雪", 75: "大雪", 77: "雪粒", 80: "小阵雨", 81: "阵雨", 82: "大阵雨", 85: "阵雪", 86: "强阵雪", 95: "雷暴", 96: "雷暴伴冰雹", 99: "雷暴伴大冰雹"}
 
 
-def fetch_json(url: str) -> dict:
-    req = urllib.request.Request(url, headers={"User-Agent": "AtlasAgent/1.0"})
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        return json.loads(resp.read().decode())
-
-
-def geocode(city: str) -> dict:
-    params = urllib.parse.urlencode({"name": city, "count": 1, "language": "en", "format": "json"})
-    data = fetch_json(f"{GEOCODE_URL}?{params}")
-    results = data.get("results") or []
+def geocode(city, country=None):
+    params = {"name": city, "count": 10, "language": "en", "format": "json"}
+    if country:
+        params["countryCode"] = country.upper()
+    results = fetch_json(GEOCODE_URL + "?" + urllib.parse.urlencode(params)).get("results") or []
+    if not isinstance(results, list) or any(not isinstance(r, dict) for r in results):
+        raise APIError("Malformed geocoding results")
+    for result in results:
+        if any(not isinstance(result.get(key), (int, float)) or not math.isfinite(result[key]) for key in ("latitude", "longitude")):
+            raise APIError("Geocoding result is missing coordinates")
+    if country:
+        results = [r for r in results if r.get("country_code", "").upper() == country.upper()]
+    exact = [r for r in results if r.get("name", "").casefold() == city.casefold()]
+    results = exact or results
+    # Deduplicate aliases for the same coordinates, without guessing between towns.
+    results = list({(r["latitude"], r["longitude"]): r for r in results}.values())
     if not results:
-        raise SystemExit(f"City not found: {city}")
+        raise ValueError("City not found: " + city)
+    if len(results) != 1:
+        choices = "; ".join("{}, {}, {} ({},{})".format(r.get("name"), r.get("admin1", ""), r.get("country", ""), r["latitude"], r["longitude"]) for r in results)
+        raise ValueError("Ambiguous city; specify --country or --lat/--lon: " + choices)
     r = results[0]
-    return {
-        "name": r.get("name"),
-        "country": r.get("country"),
-        "lat": r["latitude"],
-        "lon": r["longitude"],
-        "timezone": r.get("timezone", "UTC"),
-    }
+    return {"name": r.get("name", city), "country": r.get("country", ""), "lat": r["latitude"], "lon": r["longitude"], "timezone": r.get("timezone") or "UTC"}
 
 
-def forecast(lat: float, lon: float, days: int, timezone: str = "auto") -> dict:
-    params = urllib.parse.urlencode({
-        "latitude": lat,
-        "longitude": lon,
-        "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max",
-        "timezone": timezone,
-        "forecast_days": min(days, 16),
-    })
-    return fetch_json(f"{FORECAST_URL}?{params}")
+def local_today(tz):
+    return datetime.now(ZoneInfo(tz) if tz != "auto" else timezone.utc).date()
 
 
-WMO_CODES = {
-    0: "晴", 1: "大部晴朗", 2: "局部多云", 3: "多云",
-    45: "雾", 48: "雾凇", 51: "小毛毛雨", 53: "毛毛雨", 55: "大毛毛雨",
-    61: "小雨", 63: "中雨", 65: "大雨", 71: "小雪", 73: "中雪", 75: "大雪",
-    80: "小阵雨", 81: "阵雨", 82: "大阵雨", 95: "雷暴", 96: "雷暴+小冰雹", 99: "雷暴+大冰雹",
-}
+def forecast(lat, lon, days, timezone="auto", start=None, today=None):
+    if not 1 <= days <= 16:
+        raise ValueError("--days must be between 1 and 16; longer trips need climate reference, not a forecast")
+    today = today or local_today(timezone)
+    start = start or today
+    end = start + timedelta(days=days - 1)
+    if start < today or end > today + timedelta(days=15):
+        raise ValueError("Requested dates {} to {} are outside the forecast window {} to {}; use climate reference and recheck near departure".format(start, end, today, today + timedelta(days=15)))
+    params = {"latitude": lat, "longitude": lon, "daily": DAILY_FIELDS, "timezone": timezone, "start_date": start.isoformat(), "end_date": end.isoformat()}
+    data = fetch_json(FORECAST_URL + "?" + urllib.parse.urlencode(params))
+    expected = [(start + timedelta(days=i)).isoformat() for i in range(days)]
+    if not isinstance(data.get("daily"), dict) or data["daily"].get("time") != expected:
+        raise APIError("Forecast date coverage does not match requested dates")
+    return data
 
 
-def print_forecast(loc: dict, data: dict) -> None:
+def current(lat, lon, timezone="auto"):
+    params = {"latitude": lat, "longitude": lon, "current": "temperature_2m,weather_code,precipitation,wind_speed_10m", "timezone": timezone}
+    data = fetch_json(FORECAST_URL + "?" + urllib.parse.urlencode(params))
+    if not isinstance(data.get("current"), dict) or not data["current"].get("time"):
+        raise APIError("Service did not return current conditions with a timestamp")
+    return data
+
+
+def value_at(daily, key, index):
+    values = daily.get(key) or []
+    if not isinstance(values, list):
+        return None
+    return values[index] if index < len(values) else None
+
+
+def fmt(value, suffix="", digits=0):
+    if not isinstance(value, (int, float)) or not math.isfinite(value):
+        return "暂无数据"
+    return ("{:." + str(digits) + "f}").format(value) + suffix
+
+
+def print_forecast(loc, data):
     daily = data.get("daily", {})
-    dates = daily.get("time", [])
-    print(f"📍 {loc['name']}, {loc.get('country', '')} ({loc['lat']:.2f}, {loc['lon']:.2f})")
-    print(f"🕐 Timezone: {data.get('timezone', loc.get('timezone'))}")
-    print()
-    print(f"{'日期':<12} {'天气':<10} {'最高':>6} {'最低':>6} {'降水mm':>8} {'降水%':>6} {'风速km/h':>10}")
-    print("-" * 62)
-    for i, d in enumerate(dates):
-        code = daily.get("weather_code", [0])[i]
-        wx = WMO_CODES.get(code, f"code={code}")
-        tmax = daily.get("temperature_2m_max", [None])[i]
-        tmin = daily.get("temperature_2m_min", [None])[i]
-        precip = daily.get("precipitation_sum", [0])[i]
-        prob = daily.get("precipitation_probability_max", [None])[i]
-        wind = daily.get("wind_speed_10m_max", [None])[i]
-        prob_s = f"{prob}%" if prob is not None else "-"
-        print(f"{d:<12} {wx:<10} {tmax:>5.0f}°C {tmin:>5.0f}°C {precip:>7.1f} {prob_s:>6} {wind:>9.0f}")
+    print("地点: {}, {} | 时区: {}".format(loc["name"], loc.get("country", ""), data.get("timezone", loc.get("timezone"))))
+    print("日期 | 天气 | 最高 | 最低 | 降水mm | 降水概率 | 风速km/h")
+    for i, d in enumerate(daily.get("time", [])):
+        code = value_at(daily, "weather_code", i)
+        cells = [d, WMO_CODES.get(code, "暂无数据" if code is None else "code=" + str(code)), fmt(value_at(daily, "temperature_2m_max", i), "°C"), fmt(value_at(daily, "temperature_2m_min", i), "°C"), fmt(value_at(daily, "precipitation_sum", i), digits=1), fmt(value_at(daily, "precipitation_probability_max", i), "%"), fmt(value_at(daily, "wind_speed_10m_max", i))]
+        print(" | ".join(cells))
+
+
+def iso_date(text):
+    try:
+        return date.fromisoformat(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("Use a valid YYYY-MM-DD date") from exc
 
 
 def main():
-    p = argparse.ArgumentParser(description="AtlasAgent Open-Meteo weather client")
-    sub = p.add_subparsers(dest="cmd", required=True)
-
-    fc = sub.add_parser("forecast", help="Daily forecast")
-    fc.add_argument("--city", help="City name for geocoding")
-    fc.add_argument("--lat", type=float)
-    fc.add_argument("--lon", type=float)
-    fc.add_argument("--days", type=int, default=7)
-    fc.add_argument("--json", action="store_true")
-
-    cur = sub.add_parser("current", help="Current conditions summary")
-    cur.add_argument("--city", required=True)
-
-    args = p.parse_args()
-
-    if args.cmd == "forecast":
+    parser = argparse.ArgumentParser(description=__doc__)
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    for name in ("forecast", "current"):
+        child = sub.add_parser(name)
+        child.add_argument("--city")
+        child.add_argument("--country", help="ISO two-letter country code")
+        child.add_argument("--lat", type=float)
+        child.add_argument("--lon", type=float)
+        child.add_argument("--timezone", help="IANA timezone (recommended for coordinates)")
+        child.add_argument("--json", action="store_true")
+        if name == "forecast":
+            child.add_argument("--from", dest="start", type=iso_date, help="First trip date, YYYY-MM-DD")
+            child.add_argument("--days", type=int, default=7)
+    args = parser.parse_args()
+    try:
+        if args.cmd == "forecast" and not 1 <= args.days <= 16:
+            raise ValueError("--days must be between 1 and 16")
+        if args.country and (len(args.country) != 2 or not args.country.isalpha()):
+            raise ValueError("--country must be a two-letter country code")
+        if args.city and (args.lat is not None or args.lon is not None):
+            raise ValueError("Choose --city or --lat/--lon")
         if args.city:
-            loc = geocode(args.city)
+            loc = geocode(args.city, args.country)
         elif args.lat is not None and args.lon is not None:
-            loc = {"name": f"{args.lat},{args.lon}", "country": "", "lat": args.lat, "lon": args.lon, "timezone": "auto"}
+            if not math.isfinite(args.lat) or not math.isfinite(args.lon) or not -90 <= args.lat <= 90 or not -180 <= args.lon <= 180:
+                raise ValueError("Latitude/longitude are out of range")
+            loc = {"name": "{},{}".format(args.lat, args.lon), "country": "", "lat": args.lat, "lon": args.lon, "timezone": "auto"}
         else:
-            raise SystemExit("Provide --city or --lat/--lon")
-        data = forecast(loc["lat"], loc["lon"], args.days, loc.get("timezone", "auto"))
+            raise ValueError("Provide --city or both --lat and --lon")
+        if args.timezone:
+            ZoneInfo(args.timezone)
+            loc["timezone"] = args.timezone
+        data = forecast(loc["lat"], loc["lon"], args.days, loc["timezone"], args.start) if args.cmd == "forecast" else current(loc["lat"], loc["lon"], loc["timezone"])
         if args.json:
-            print(json.dumps({"location": loc, "forecast": data}, ensure_ascii=False, indent=2))
-        else:
+            print(json.dumps({"status": "ok", "location": loc, args.cmd: data}, ensure_ascii=False, indent=2))
+        elif args.cmd == "forecast":
             print_forecast(loc, data)
-
-    elif args.cmd == "current":
-        loc = geocode(args.city)
-        data = forecast(loc["lat"], loc["lon"], 1, loc.get("timezone", "auto"))
-        daily = data.get("daily", {})
-        d0 = daily.get("time", ["?"])[0]
-        code = daily.get("weather_code", [0])[0]
-        tmax = daily.get("temperature_2m_max", [None])[0]
-        tmin = daily.get("temperature_2m_min", [None])[0]
-        print(f"📍 {loc['name']}, {loc['country']}")
-        print(f"📅 {d0}: {WMO_CODES.get(code, code)}, {tmin:.0f}–{tmax:.0f}°C")
+        else:
+            now = data["current"]
+            print("{} | {} ({}) | {} | {}".format(loc["name"], now["time"], data.get("timezone", loc["timezone"]), WMO_CODES.get(now.get("weather_code"), "暂无数据"), fmt(now.get("temperature_2m"), "°C", 1)))
+    except (APIError, ValueError, KeyError, OverflowError) as exc:
+        if args.json:
+            print(json.dumps({"status": "error", "error": str(exc)}, ensure_ascii=False))
+        else:
+            print("Weather error: " + str(exc), file=sys.stderr)
+        return 2
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

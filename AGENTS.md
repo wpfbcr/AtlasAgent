@@ -14,7 +14,7 @@ Full guide: [docs/install.md](docs/install.md)
 
 ```bash
 export ATLAS_ROOT="${ATLAS_ROOT:-$HOME/AtlasAgent}"
-bash "$ATLAS_ROOT/scripts/atlas-agent doctor"
+bash "$ATLAS_ROOT/scripts/atlas-agent" doctor
 ```
 
 ## Skills (9)

@@ -16,8 +16,8 @@ Pre-departure checklist for every international plan.
 
 ## Essentials
 
-- [ ] Passport (≥6 months validity, ≥2 blank pages)
-- [ ] Visa / ESTA / eTA / EVW (see visa-entry)
+- [ ] Passport (validity and blank pages satisfy the destination’s verified requirements)
+- [ ] Visa / ESTA / eTA / ETA where applicable (see visa-entry)
 - [ ] IDP if driving (see transport-global)
 - [ ] Flight/hotel confirmations (print + digital)
 - [ ] Payment cards + some cash (USD/EUR backup)

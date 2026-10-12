@@ -36,7 +36,7 @@ See [references/transport-guides.md](references/transport-guides.md).
 
 ## Optional L1
 
-Real-time prices via trvl MCP — [mcp/recommended-servers.md](../../mcp/recommended-servers.md)
+Real-time prices via trvl MCP — `$ATLAS_ROOT/mcp/recommended-servers.md`
 
 ## Pitfalls
 

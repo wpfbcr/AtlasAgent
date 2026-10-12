@@ -191,9 +191,14 @@ scripts/                → 可执行 CLI（doctor 会检查）
 | `atlas-agent install --agent=cursor` | 仅安装到 Cursor |
 | `atlas-agent install --safe` | 只输出手动步骤 |
 | `atlas-agent install --dry-run` | 预览将执行的操作 |
+| `atlas-agent install --overwrite` | 备份后替换已有不同内容的技能 |
 | `atlas-agent doctor` | 健康检查 |
 | `atlas-agent doctor --json` | JSON 格式输出 |
+| `atlas-agent doctor --offline` | 跳过联网检查，明确标记降级状态 |
+| `atlas-agent install --env=none` | 保留 shell 配置 |
 | `atlas-agent check-update` | 更新指引 |
+
+安装默认保留已有技能：相同内容跳过，遇到不同内容先停止。检查冲突后，可用 `--overwrite` 备份并替换；备份路径见安装输出。详见[安装说明](docs/install.md#existing-skills)。
 
 ---
 

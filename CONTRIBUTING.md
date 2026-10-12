@@ -18,10 +18,21 @@
 
 ## 验证
 
+离线回归检查（安装测试仅写入临时目录，不修改真实的用户配置）：
+
+```bash
+python3 -m pip install -r requirements-dev.txt
+python3 -m unittest discover -s tests -v
+for script in scripts/install.sh scripts/atlas-agent scripts/atlas-env.sh; do
+  bash -n "$script" || exit 1
+done
+```
+
+可选的联网连通检查：
+
 ```bash
 export ATLAS_ROOT="$(pwd)"
 python3 scripts/weather_client.py forecast --city Paris --days 3
-bash scripts/install.sh cursor   # 本地测试安装
 ```
 
 ## License

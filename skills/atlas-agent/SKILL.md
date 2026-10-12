@@ -19,13 +19,13 @@ Orchestrates worldwide trip planning: multi-plan comparison, daily schedules, bu
 
 ## Install
 
-If not installed yet, follow [docs/install.md](../../docs/install.md) or tell the user:
+If not installed yet, follow `$ATLAS_ROOT/docs/install.md` or tell the user:
 
 ```
 帮我安装 AtlasAgent：https://raw.githubusercontent.com/wpfbcr/AtlasAgent/main/docs/install.md
 ```
 
-Verify: `bash "$ATLAS_ROOT/scripts/atlas-agent doctor"`
+Verify: `bash "$ATLAS_ROOT/scripts/atlas-agent" doctor`
 
 ## When to Use
 
@@ -36,7 +36,7 @@ Verify: `bash "$ATLAS_ROOT/scripts/atlas-agent doctor"`
 
 ## Required Inputs
 
-Ask for missing fields before planning:
+For a real booking plan, confirm missing fields before planning. For a demonstration or test, use user-approved assumptions and list them explicitly:
 
 | Required | Optional |
 |----------|----------|
@@ -56,21 +56,30 @@ export ATLAS_SCRIPTS="$ATLAS_ROOT/scripts"
 export ATLAS_REF="$ATLAS_ROOT/skills/atlas-agent/references"
 ```
 
-Install: see [docs/install.md](../../docs/install.md) — **full repo required**, not skills/ alone.
+Install: see `$ATLAS_ROOT/docs/install.md` — **full repo required**, not skills/ alone.
 
 ## Workflow
 
 ### Phase 0 — Profile
 
-1. Passport nationality → read `visa-entry` skill
+1. For international travel, passport nationality → read `visa-entry`; for domestic travel, state that visa analysis is not applicable
 2. Dietary restrictions → read `dietary-global` skill
 3. Booked tickets/hotels → treat as **fixed anchors**
+
+### Phase 0.5 — Disambiguation
+
+Do not guess ambiguous names. Present options and **ask the user to choose**:
+
+- Location, transport, duration, ticket/booking needs
+- Local + English names
+
+Examples: Paris (France vs Texas), Springfield (30+ US cities).
 
 ### Phase 1 — Data (parallel)
 
 ```bash
 # Weather
-python3 "$ATLAS_SCRIPTS/weather_client.py" forecast --city "<city>" --days <N>
+python3 "$ATLAS_SCRIPTS/weather_client.py" forecast --lat <confirmed-lat> --lon <confirmed-lon> --timezone <IANA-timezone> --from YYYY-MM-DD --days <N>
 
 # Currency
 python3 "$ATLAS_SCRIPTS/currency_client.py" rates --base <currency>
@@ -80,28 +89,21 @@ python3 "$ATLAS_SCRIPTS/currency_client.py" convert <amount> --from <A> --to <B>
 python3 "$ATLAS_SCRIPTS/holiday_check.py" --city "<city>" --from YYYY-MM-DD --days <N>
 ```
 
+Weather output must cover the exact trip dates. Outside the supported forecast window, label climate reference explicitly and recheck near departure. A network error or missing field is unavailable data, never a zero or sunny default.
+
 **Geography** (first available):
 
 1. `$MAPS_SCRIPT` if set (any geocoder/POI CLI, e.g. OpenStreetMap client)
 2. Web search + `$ATLAS_REF/destinations/<city>.md`
 3. Never invent hotel/restaurant names
 
-**Flights/hotels (optional L1):** trvl MCP or web search — see [mcp/recommended-servers.md](../../mcp/recommended-servers.md)
+**Flights/hotels (optional L1):** trvl MCP or web search — see `$ATLAS_ROOT/mcp/recommended-servers.md`
 
 **Reviews (optional L1):** `local-intel` skill
 
-### Phase 1.5 — Disambiguation
-
-Do not guess ambiguous names. Present options and **ask the user to choose**:
-
-- Location, transport, duration, ticket/booking needs
-- Local + English names
-
-Examples: Paris (France vs Texas), Springfield (30+ US cities).
-
 ### Phase 2 — Scheduling
 
-1. Use `holiday_check.py` — weekdays, holidays, museum closure hints
+1. Use `holiday_check.py` for weekdays and closure hints, then verify each scheduled venue’s specific opening calendar from official sources
 2. Book major sights on **weekdays** when possible
 3. Arrival day = half day; allow jet-lag buffer after eastbound flights
 4. Multi-city: minimize backtracking (use distance/routing tools if available)
@@ -124,6 +126,8 @@ Each plan includes:
 | … | … | … |
 
 **Required sections:** must-eat list, 2–3 stays, budget table (budget-optimizer), transport decision (transport-global), document checklist (travel-documents), cautions.
+
+**Final validation:** check exact day count, weekdays, opening days, sum of budget items, party-size division, currency labels, and budget constraints. Mark any unresolved information as unverified. Same-currency budgets need no exchange rate date.
 
 **Meals:** every meal = restaurant + dishes with dietary tags (🟢🟡🔴⚠️) + price per person.
 

@@ -45,8 +45,7 @@ Visa and entry analysis for international trips. **Policies change — always no
 
 ## Universal Rules
 
-- Passport valid ≥6 months at entry (most countries)
-- ≥2 blank visa pages
+- Check the destination’s actual passport validity and blank-page requirements; report the specific requirement instead of treating six months/two pages as universal
 - Schengen: 90/180 day rule
 - US ESTA / Canada eTA / UK ETA where applicable
 - Transit may still require a visa
